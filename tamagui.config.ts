@@ -1,8 +1,12 @@
-import { defaultConfig } from '@tamagui/config/v6'
+import { animations } from '@tamagui/config/animations-reanimated'
+import { createV6Config } from '@tamagui/config/v6-base'
 import { createTamagui } from 'tamagui'
-import { themes } from './themes'
+import { themes, tokens } from './themes'
 
-export const tamaguiConfig = createTamagui({ ...defaultConfig, themes })
+export const tamaguiConfig = createTamagui({
+  ...createV6Config({ themes, colorTokens: tokens.color }),
+  animations,
+})
 
 export default tamaguiConfig
 

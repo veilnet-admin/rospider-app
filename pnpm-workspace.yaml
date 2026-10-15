@@ -12,3 +12,5 @@ minimumReleaseAgeExclude:
   - expo-modules-core@57.0.23
   - expo-router@57.0.27
   - expo@57.0.29
+publicHoistPattern:
+  - '@tamagui/*'

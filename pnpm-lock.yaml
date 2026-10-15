@@ -12,7 +12,7 @@ importers:
         specifier: ~57.0.24
         version: 57.0.24(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(expo@57.0.29)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
       '@tamagui/config':
-        specifier: ^3.0.9
+        specifier: 3.0.9
         version: 3.0.9(eed7f611c7ef51685b34dc32a5d02bd3)
       '@tamagui/themes':
         specifier: 3.0.9
@@ -84,11 +84,11 @@ importers:
         specifier: 0.10.1
         version: 0.10.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1)
       tamagui:
-        specifier: ^3.0.9
+        specifier: 3.0.9
         version: 3.0.9(1949fff29bf1a9a8394c6fe15d636387)
     devDependencies:
       '@tamagui/cli':
-        specifier: ^3.0.9
+        specifier: 3.0.9
         version: 3.0.9(50362396534ea9b436de0e843b21f3ac)
       '@types/react':
         specifier: ~19.2.2

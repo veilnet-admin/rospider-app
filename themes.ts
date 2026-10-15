@@ -4,6 +4,7 @@ import {
   levels,
   ramp,
   raise,
+  shadows,
   type GetThemeContext,
   type ThemeDefinitionContext,
 } from '@tamagui/themes/builder'
@@ -145,9 +146,13 @@ export const tree = {
 
 export function getTheme({ recipe }: GetThemeContext<typeof tokens, Recipe>) {
   const scale = scales[recipe.scheme][recipe.level ?? 1]
+  // shadows are theme values, not color tokens: resolve them per scheme like the builder's default getTheme
+  const schemeShadows = shadows[recipe.scheme]
   return {
     ...ramp(recipe.palette, recipe.scheme, scale),
     ...fromShades(recipe.palette, scale),
+    ...schemeShadows,
+    'shadow-color': schemeShadows[scale['shadow-color']],
   }
 }
 
