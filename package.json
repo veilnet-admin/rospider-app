@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.24",
+    "@tamagui/config": "^3.0.9",
+    "@tamagui/themes": "3.0.9",
     "expo": "~57.0.29",
     "expo-constants": "~57.0.22",
     "expo-device": "~57.0.2",
@@ -25,9 +27,11 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "tamagui": "^3.0.9"
   },
   "devDependencies": {
+    "@tamagui/cli": "^3.0.9",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   },
