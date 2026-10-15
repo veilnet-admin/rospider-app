@@ -53,6 +53,16 @@ export class RosBridge {
     this.open()
   }
 
+  // drop a socket that has gone silent and dial again; a dead Wi-Fi link can
+  // leave a WebSocket looking open until the OS times it out
+  reconnect() {
+    if (!this.url) return
+    this.clearReconnect()
+    this.closeSocket()
+    this.setStatus('disconnected')
+    this.open()
+  }
+
   disconnect() {
     this.url = ''
     this.clearReconnect()

@@ -1,5 +1,4 @@
 import { NetInfoStateType, useNetInfo } from '@react-native-community/netinfo'
-import { useEffect, useState } from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
 import { Text, XStack } from 'tamagui'
 
@@ -8,8 +7,6 @@ import { useBridgeStatus, useRos } from '@/ros/RosProvider'
 
 import { HexapodIcon } from './icons'
 import { Mono } from './Panel'
-
-const PING_MS = 3000
 
 const toInt = (ip: string) => {
   const parts = ip.split('.').map(Number)
@@ -23,41 +20,11 @@ function sameSubnet(a: string, b: string, mask: string) {
   return (ia & im) === (ib & im)
 }
 
-function useRoundTrip() {
-  const { robot } = useRos()
-  const status = useBridgeStatus()
-  const [rtt, setRtt] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (status !== 'connected') {
-      setRtt(null)
-      return
-    }
-    let cancelled = false
-    const measure = () => {
-      const started = Date.now()
-      robot
-        .ping()
-        .then(() => !cancelled && setRtt(Date.now() - started))
-        .catch(() => !cancelled && setRtt(null))
-    }
-    measure()
-    const timer = setInterval(measure, PING_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [status, robot])
-
-  return rtt
-}
-
 export function NetworkPath() {
   const { ink, accent } = usePalette()
   const net = useNetInfo()
   const status = useBridgeStatus()
-  const { connection } = useRos()
-  const rtt = useRoundTrip()
+  const { connection, rtt } = useRos()
 
   const details = net.type === NetInfoStateType.wifi || net.type === NetInfoStateType.ethernet ? net.details : null
   const tabletIp = details?.ipAddress ?? null

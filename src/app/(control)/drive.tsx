@@ -4,7 +4,7 @@ import { Text, View, XStack, YStack } from "tamagui";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { StopIcon } from "@/components/icons";
 import { Joystick } from "@/components/Joystick";
-import { MjpegView } from "@/components/MjpegView";
+import { DEPTH_BAND_MM, DEPTH_COLORS, MjpegView } from "@/components/MjpegView";
 import { Mono, Muted, Panel, PanelTitle } from "@/components/Panel";
 import { Segmented } from "@/components/Segmented";
 import { useArm, type ArmStatus } from "@/hooks/useArm";
@@ -86,7 +86,8 @@ export default function Drive() {
     }
     lastSent.current = next;
     lastSentAt.current = Date.now();
-    robot.drive(next.vx, next.vy, next.wz);
+    if (isStop) robot.stopWalking();
+    else robot.drive(next.vx, next.vy, next.wz);
     setCommand(next);
   };
 
@@ -94,7 +95,7 @@ export default function Drive() {
   useEffect(
     () => () => {
       if (trailing.current) clearTimeout(trailing.current);
-      robot.drive(0, 0, 0);
+      robot.stopWalking();
     },
     [robot]
   );
@@ -168,9 +169,9 @@ export default function Drive() {
 
         <Panel flex={1} items="center" justify="flex-end" gap="2.5">
           <Joystick
-            width={196}
-            height={196}
-            knob={68}
+            width={176}
+            height={176}
+            knob={62}
             axis="both"
             label="Move joystick"
             disabled={locked}
@@ -187,7 +188,7 @@ export default function Drive() {
       </YStack>
 
       <YStack flex={1} minW={0} rounded="2xl" overflow="hidden" borderWidth={1} borderColor="border-color" bg="video">
-        <MjpegView url={videoUrl(FEED_TOPIC[feed])} />
+        <MjpegView url={videoUrl(FEED_TOPIC[feed])} colorize={feed === "depth" ? "depth" : undefined} />
 
         <XStack position="absolute" t={14} l={14} r={14} items="flex-start" justify="space-between" pointerEvents="box-none">
           <View theme="dark" w={260}>
@@ -227,6 +228,8 @@ export default function Drive() {
           <Readout label="vx" value={`${command.vx.toFixed(2)} m/s`} />
           <Readout label="vy" value={`${command.vy.toFixed(2)} m/s`} />
           <Readout label="ωz" value={`${command.wz.toFixed(2)} rad/s`} />
+          <View flex={1} />
+          {feed === "depth" ? <DepthLegend /> : null}
         </XStack>
 
         {confirmingRest ? (
@@ -385,6 +388,22 @@ function SaveRestDialog({ pose, onCancel, onSave }: { pose: [number, number][] |
         </XStack>
       </YStack>
     </YStack>
+  );
+}
+
+function DepthLegend() {
+  const near = (DEPTH_BAND_MM / 1000).toFixed(1);
+  const far = ((DEPTH_BAND_MM * DEPTH_COLORS.length) / 1000).toFixed(1);
+  return (
+    <XStack theme="dark" items="center" gap="2" h={36} px="2.5" rounded="lg" bg="background" borderWidth={1} borderColor="border-color">
+      <Mono fontSize="xs">{near} m</Mono>
+      <XStack h={10} rounded="xs" overflow="hidden">
+        {DEPTH_COLORS.map((color) => (
+          <View key={color} w={5} h={10} style={{ backgroundColor: color }} />
+        ))}
+      </XStack>
+      <Mono fontSize="xs">{far} m</Mono>
+    </XStack>
   );
 }
 

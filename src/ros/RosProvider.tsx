@@ -10,6 +10,10 @@ export const DEFAULT_CONNECTION: Connection = { host: '192.168.4.9', bridgePort:
 
 // app modes exit on their own when they miss heartbeats for 5 s
 const HEARTBEAT_MS = 2000
+// round-trip probe; two misses in a row means the link is dead
+const PING_MS = 3000
+const PING_TIMEOUT_MS = 2500
+const MISSES_BEFORE_RECONNECT = 2
 
 type RosContextValue = {
   bridge: RosBridge
@@ -24,6 +28,8 @@ type RosContextValue = {
   stopped: boolean
   emergencyStop: () => void
   resume: () => void
+  // last rosbridge round trip in ms, null while unknown or unreachable
+  rtt: number | null
 }
 
 const RosContext = createContext<RosContextValue | null>(null)
@@ -34,6 +40,7 @@ export function RosProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState(DEFAULT_CONNECTION)
   const [activeMode, setActiveMode] = useState<ModeId | null>(null)
   const [stopped, setStopped] = useState(false)
+  const [rtt, setRtt] = useState<number | null>(null)
   const status = useSyncExternalStore(
     (listener) => bridge.onStatus(listener),
     () => bridge.getStatus()
@@ -49,7 +56,7 @@ export function RosProvider({ children }: { children: ReactNode }) {
   )
 
   const disconnect = useCallback(() => {
-    if (bridge.getStatus() === 'connected') robot.drive(0, 0, 0)
+    if (bridge.getStatus() === 'connected') robot.stopWalking()
     setActiveMode(null)
     bridge.disconnect()
   }, [bridge, robot])
@@ -68,7 +75,7 @@ export function RosProvider({ children }: { children: ReactNode }) {
   const enterMode = useCallback(
     async (mode: ModeId) => {
       if (activeMode && activeMode !== mode) await robot.exitMode(activeMode).catch(() => {})
-      robot.drive(0, 0, 0)
+      robot.stopWalking()
       await robot.enterMode(mode)
       setActiveMode(mode)
     },
@@ -84,6 +91,38 @@ export function RosProvider({ children }: { children: ReactNode }) {
 
   const resume = useCallback(() => setStopped(false), [])
 
+  // measure the round trip, and reconnect when the robot stops answering
+  useEffect(() => {
+    if (status !== 'connected') {
+      setRtt(null)
+      return
+    }
+    let cancelled = false
+    let misses = 0
+    const probe = () => {
+      const started = Date.now()
+      bridge
+        .callService('/rosapi/get_time', {}, PING_TIMEOUT_MS)
+        .then(() => {
+          if (cancelled) return
+          misses = 0
+          setRtt(Date.now() - started)
+        })
+        .catch(() => {
+          if (cancelled) return
+          misses += 1
+          setRtt(null)
+          if (misses >= MISSES_BEFORE_RECONNECT) bridge.reconnect()
+        })
+    }
+    probe()
+    const timer = setInterval(probe, PING_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [status, bridge])
+
   // keep the active mode alive
   useEffect(() => {
     if (!activeMode || status !== 'connected') return
@@ -93,10 +132,10 @@ export function RosProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer)
   }, [activeMode, status, robot])
 
-  // cmd_vel persists on the robot, so never leave it walking when the app is backgrounded
+  // walking persists on the robot, so never leave it walking when the app is backgrounded
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' && bridge.getStatus() === 'connected') robot.drive(0, 0, 0)
+      if (state !== 'active' && bridge.getStatus() === 'connected') robot.stopWalking()
     })
     return () => sub.remove()
   }, [bridge, robot])
@@ -115,8 +154,9 @@ export function RosProvider({ children }: { children: ReactNode }) {
       stopped,
       emergencyStop,
       resume,
+      rtt,
     }),
-    [bridge, robot, connection, connect, disconnect, videoUrl, activeMode, enterMode, exitMode, stopped, emergencyStop, resume]
+    [bridge, robot, connection, connect, disconnect, videoUrl, activeMode, enterMode, exitMode, stopped, emergencyStop, resume, rtt]
   )
 
   return <RosContext value={value}>{children}</RosContext>

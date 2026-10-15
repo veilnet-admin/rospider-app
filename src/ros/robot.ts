@@ -94,6 +94,21 @@ export function createRobot(bridge: RosBridge) {
       angular: { x: 0, y: 0, z: wz },
     } satisfies Twist)
 
+  // a zero cmd_vel keeps the legs marching in place; traveling with gait 0 is
+  // move_controller's real stop: it halts the step generator and settles the pose
+  const stopWalking = () =>
+    bridge.publish('/controller/traveling', 'kinematics_msgs/msg/Traveling', {
+      gait: 0,
+      stride: 0,
+      height: 0,
+      direction: 0,
+      rotation: 0,
+      time: 0.5,
+      steps: 0,
+      relative_height: false,
+      interrupt: true,
+    })
+
   const runAction = (name: string) =>
     bridge.publish('/controller/run_actionset', 'interfaces/msg/RunActionSet', {
       action_path: name,
@@ -102,6 +117,7 @@ export function createRobot(bridge: RosBridge) {
 
   return {
     drive,
+    stopWalking,
     runAction,
 
     setGaitAndStance(gait: Gait, stance: Stance) {
@@ -135,7 +151,7 @@ export function createRobot(bridge: RosBridge) {
 
     // stop walking and any running action group; the robot settles into its init pose
     stopAll() {
-      drive(0, 0, 0)
+      stopWalking()
       runAction('stop')
     },
 
