@@ -13,6 +13,9 @@ export const tokens: { color: Record<string, string> } = {
   color: {
   "white": "#ffffff",
   "black": "#000000",
+  "stop": "hsla(21, 88%, 40%, 1)",
+  "stop-text": "hsla(27, 96%, 61%, 1)",
+  "video": "hsla(220, 14%, 3%, 1)",
   "base-light-50": "hsla(220, 14%, 99%, 1)",
   "base-light-100": "hsla(220, 14%, 93%, 1)",
   "base-light-200": "hsla(220, 14%, 87%, 1)",

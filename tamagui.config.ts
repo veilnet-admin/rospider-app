@@ -1,10 +1,17 @@
 import { animations } from '@tamagui/config/animations-reanimated'
-import { createV6Config } from '@tamagui/config/v6-base'
+import { createSystemFont, createV6Config, withTailwindTypeScale } from '@tamagui/config/v6-base'
 import { createTamagui } from 'tamagui'
 import { themes, tokens } from './themes'
 
+const v6 = createV6Config({ themes, colorTokens: tokens.color })
+
 export const tamaguiConfig = createTamagui({
-  ...createV6Config({ themes, colorTokens: tokens.color }),
+  ...v6,
+  fonts: {
+    ...v6.fonts,
+    // telemetry readouts
+    mono: withTailwindTypeScale(createSystemFont({ family: 'monospace' })),
+  },
   animations,
 })
 
