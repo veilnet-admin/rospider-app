@@ -1,5 +1,5 @@
 // Signs Android release builds with the keystore described in
-// credentials/android-release.properties (git-ignored), so `pnpm build:apk`
+// credentials/android-release.properties, so `pnpm build:apk`
 // produces an installable, properly signed APK from the generated project.
 const { withAppBuildGradle } = require('expo/config-plugins')
 
