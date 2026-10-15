@@ -44,3 +44,6 @@ example
 
 # tamagui compiler output
 .tamagui/
+
+# release signing keys and passwords
+credentials/
