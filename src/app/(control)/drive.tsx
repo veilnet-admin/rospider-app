@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Text, View, XStack, YStack } from "tamagui";
 
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
-import { StopIcon } from "@/components/icons";
+import { ArmIcon, ChevronIcon, StopIcon } from "@/components/icons";
 import { Joystick } from "@/components/Joystick";
 import { DEPTH_BAND_MM, DEPTH_COLORS, MjpegView } from "@/components/MjpegView";
-import { Mono, Muted, Panel, PanelTitle } from "@/components/Panel";
+import { ChipGroup, Glass, GLASS, GLASS_BORDER, GLASS_LIGHT, OVERLAY_INK } from "@/components/Overlay";
+import { Mono, Muted, PanelTitle } from "@/components/Panel";
 import { Segmented } from "@/components/Segmented";
 import { useArm, type ArmStatus } from "@/hooks/useArm";
 import { usePalette } from "@/hooks/usePalette";
@@ -41,13 +42,21 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000 || 0;
 type Command = { vx: number; vy: number; wz: number };
 const ZERO: Command = { vx: 0, vy: 0, wz: 0 };
 
+// overlay layout: the bottom cards and the readouts between them
+const EDGE = 16;
+const MOVE_CARD_W = 228;
+const TURN_CARD_W = 268;
+const ARM_BUTTON_H = 54;
+
 export default function Drive() {
   const { robot, videoUrl, stopped, resume, activeMode, exitMode } = useRos();
+  const { accent } = usePalette();
   const [speed, setSpeed] = useState<Speed>("normal");
   const [gait, setGait] = useState<Gait>("tripod");
   const [stance, setStance] = useState<Stance>("middle");
   const [feed, setFeed] = useState<Feed>("rgb");
   const [command, setCommand] = useState<Command>(ZERO);
+  const [armOpen, setArmOpen] = useState(false);
   const [confirmingRest, setConfirmingRest] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const arm = useArm(!stopped);
@@ -105,6 +114,7 @@ export default function Drive() {
     stick.current = { x: 0, y: 0, turn: 0 };
     lastSent.current = ZERO;
     setCommand(ZERO);
+    setArmOpen(false);
   }, [stopped]);
 
   useEffect(() => {
@@ -123,144 +133,185 @@ export default function Drive() {
   };
 
   return (
-    <XStack flex={1} gap="4" p="4">
-      <YStack w={272} gap="4">
-        <Panel>
-          <PanelTitle>Speed</PanelTitle>
-          <Segmented
-            value={speed}
-            onChange={setSpeed}
-            options={[
-              { value: "slow", label: "Slow" },
-              { value: "normal", label: "Normal" },
-              { value: "fast", label: "Fast" },
-            ]}
-          />
-        </Panel>
+    <View flex={1} bg="video" overflow="hidden">
+      <MjpegView url={videoUrl(FEED_TOPIC[feed])} colorize={feed === "depth" ? "depth" : undefined} />
 
-        <Panel gap="2.5">
-          <PanelTitle>Walk</PanelTitle>
-          <Text fontSize="sm" opacity={0.78}>
-            Gait
-          </Text>
-          <Segmented
-            value={gait}
-            onChange={changeGait}
-            disabled={locked}
-            options={[
-              { value: "tripod", label: "Tripod" },
-              { value: "ripple", label: "Ripple" },
-            ]}
-          />
-          <Text fontSize="sm" opacity={0.78}>
-            Height
-          </Text>
-          <Segmented
-            value={stance}
-            onChange={changeStance}
-            disabled={locked}
-            options={[
-              { value: "low", label: "Low" },
-              { value: "middle", label: "Mid" },
-              { value: "high", label: "High" },
-            ]}
-          />
-        </Panel>
+      <XStack position="absolute" t={EDGE} l={EDGE} r={EDGE} items="flex-start" gap="2.5" zIndex={2} pointerEvents="box-none">
+        <ChipGroup
+          a11yLabel="Camera feed"
+          value={feed}
+          onChange={setFeed}
+          options={[
+            { value: "rgb", label: "RGB" },
+            { value: "depth", label: "Depth" },
+            { value: "ir", label: "IR" },
+          ]}
+        />
+        <ChipGroup
+          label="Speed"
+          value={speed}
+          onChange={setSpeed}
+          options={[
+            { value: "slow", label: "Slow" },
+            { value: "normal", label: "Normal" },
+            { value: "fast", label: "Fast" },
+          ]}
+        />
+        <ChipGroup
+          label="Gait"
+          value={gait}
+          onChange={changeGait}
+          disabled={locked}
+          options={[
+            { value: "tripod", label: "Tripod" },
+            { value: "ripple", label: "Ripple" },
+          ]}
+        />
+        <ChipGroup
+          label="Height"
+          value={stance}
+          onChange={changeStance}
+          disabled={locked}
+          options={[
+            { value: "low", label: "Low" },
+            { value: "middle", label: "Mid" },
+            { value: "high", label: "High" },
+          ]}
+        />
 
-        <Panel flex={1} items="center" justify="flex-end" gap="2.5">
-          <Joystick
-            width={176}
-            height={176}
-            knob={62}
-            axis="both"
-            label="Move joystick"
-            disabled={locked}
-            onMove={(x, y) => {
-              stick.current.x = x;
-              stick.current.y = y;
-              flush();
-            }}
-          />
-          <Text fontSize="base" fontWeight="600">
-            Move
-          </Text>
-        </Panel>
-      </YStack>
+        <View flex={1} pointerEvents="none" />
 
-      <YStack flex={1} minW={0} rounded="2xl" overflow="hidden" borderWidth={1} borderColor="border-color" bg="video">
-        <MjpegView url={videoUrl(FEED_TOPIC[feed])} colorize={feed === "depth" ? "depth" : undefined} />
+        <YStack items="flex-end" pointerEvents="box-none">
+          <XStack
+            theme="dark"
+            h={ARM_BUTTON_H}
+            items="center"
+            gap="2.5"
+            px="3.5"
+            rounded="xl"
+            bg={GLASS}
+            borderWidth={1}
+            borderColor={armOpen ? accent : GLASS_BORDER}
+            role="button"
+            aria-label="Arm controls"
+            aria-expanded={armOpen}
+            onPress={() => setArmOpen((open) => !open)}
+          >
+            <ArmIcon color={OVERLAY_INK} />
+            <Text fontSize="base" fontWeight="600" color="color">
+              Arm
+            </Text>
+            <ChevronIcon color={OVERLAY_INK} up={armOpen} />
+          </XStack>
+        </YStack>
+      </XStack>
 
-        <XStack position="absolute" t={14} l={14} r={14} items="flex-start" justify="space-between" pointerEvents="box-none">
-          <View theme="dark" w={260}>
-            <Segmented
-              value={feed}
-              onChange={setFeed}
-              options={[
-                { value: "rgb", label: "RGB" },
-                { value: "depth", label: "Depth" },
-                { value: "ir", label: "IR" },
-              ]}
-            />
+      {savedNotice ? (
+        <XStack position="absolute" t={84} l={0} r={0} justify="center" zIndex={1} pointerEvents="none">
+          <View theme="accent" h={40} px="3.5" justify="center" rounded="lg" bg="background">
+            <Text fontSize="sm" fontWeight="500">
+              Rest pose saved from the arm’s current position
+            </Text>
           </View>
-          <YStack items="flex-end" gap="2" pointerEvents="box-none">
-            <RestChip status={arm.status} onRest={arm.rest} disabled={stopped} />
-            {savedNotice ? (
-              <View theme="accent" h={40} px="3.5" justify="center" rounded="lg" bg="background">
-                <Text fontSize="sm" fontWeight="500">
-                  Rest pose saved from the arm’s current position
-                </Text>
-              </View>
-            ) : null}
-            {activeMode ? (
-              <XStack theme="dark" items="center" gap="3" h={44} pl="4" pr="1" rounded="xl" bg="background" borderWidth={1} borderColor="border-color">
-                <Text fontSize="sm">{MODE_NAME[activeMode]} is driving</Text>
-                <View h={36} px="3" justify="center" rounded="lg" bg="color-3" role="button" onPress={() => exitMode()}>
-                  <Text fontSize="sm" fontWeight="600">
-                    Exit mode
-                  </Text>
-                </View>
-              </XStack>
-            ) : null}
-          </YStack>
         </XStack>
+      ) : null}
 
-        <XStack position="absolute" b={14} l={14} r={14} items="center" gap="2" pointerEvents="none">
-          <Readout label="vx" value={`${command.vx.toFixed(2)} m/s`} />
-          <Readout label="vy" value={`${command.vy.toFixed(2)} m/s`} />
-          <Readout label="ωz" value={`${command.wz.toFixed(2)} rad/s`} />
-          <View flex={1} />
-          {feed === "depth" ? <DepthLegend /> : null}
-        </XStack>
+      <Glass position="absolute" l={EDGE} b={EDGE} w={MOVE_CARD_W} px="4" pt="3" pb="4" gap="2" items="center" rounded="2xl" bg={GLASS_LIGHT}>
+        <View self="flex-start">
+          <PanelTitle>Move</PanelTitle>
+        </View>
+        <Joystick
+          overlay
+          width={188}
+          height={188}
+          knob={64}
+          axis="both"
+          label="Move joystick"
+          disabled={locked}
+          onMove={(x, y) => {
+            stick.current.x = x;
+            stick.current.y = y;
+            flush();
+          }}
+        />
+      </Glass>
 
-        {confirmingRest ? (
-          <SaveRestDialog
-            pose={arm.current}
-            onCancel={() => setConfirmingRest(false)}
-            onSave={() => {
-              arm.saveCurrentAsRest();
-              setConfirmingRest(false);
-              setSavedNotice(true);
-            }}
-          />
-        ) : null}
-
-        {stopped ? <StoppedOverlay onResume={resume} /> : null}
-      </YStack>
-
-      <YStack w={272} gap="4">
-        <Panel gap="3">
-          <XStack items="center" gap="2">
-            <View flex={1}>
-              <PanelTitle>Arm</PanelTitle>
+      <XStack
+        position="absolute"
+        b={EDGE}
+        l={EDGE * 2 + MOVE_CARD_W}
+        r={EDGE * 2 + TURN_CARD_W}
+        justify="center"
+        items="center"
+        gap="2"
+        pointerEvents="box-none"
+      >
+        {activeMode ? (
+          <XStack theme="dark" items="center" gap="3" h={52} pl="4" pr="1.5" rounded="xl" bg={GLASS} borderWidth={1} borderColor={GLASS_BORDER}>
+            <Text fontSize="sm" color="color">
+              {MODE_NAME[activeMode]} is driving
+            </Text>
+            <View h={40} px="3" justify="center" rounded="lg" bg="color-3" role="button" onPress={() => exitMode()}>
+              <Text fontSize="sm" fontWeight="600" color="color">
+                Exit mode
+              </Text>
             </View>
+          </XStack>
+        ) : (
+          <>
+            <Readout label="vx" value={`${command.vx.toFixed(2)} m/s`} />
+            <Readout label="vy" value={`${command.vy.toFixed(2)} m/s`} />
+            <Readout label="ωz" value={`${command.wz.toFixed(2)} rad/s`} />
+            {feed === "depth" ? <DepthLegend /> : null}
+          </>
+        )}
+      </XStack>
+
+      <Glass position="absolute" r={EDGE} b={EDGE} w={TURN_CARD_W} px="4" pt="3" pb="4" gap="2" rounded="2xl" bg={GLASS_LIGHT}>
+        <PanelTitle>Turn</PanelTitle>
+        <Joystick
+          overlay
+          width={TURN_CARD_W - 32}
+          height={88}
+          knob={64}
+          axis="x"
+          label="Turn control"
+          disabled={locked}
+          onMove={(x) => {
+            stick.current.turn = x;
+            flush();
+          }}
+        />
+      </Glass>
+
+      {/* a child outside its parent's bounds gets no touches on Android, so the menu
+          hangs off the full-screen container rather than off the Arm button's row */}
+      {armOpen ? (
+        <YStack
+          theme="dark"
+          position="absolute"
+          t={EDGE + ARM_BUTTON_H + 8}
+          r={EDGE}
+          w={308}
+          p="4"
+          gap="3"
+          rounded="2xl"
+          bg="rgba(10, 11, 14, 0.94)"
+          borderWidth={1}
+          borderColor="rgba(255, 255, 255, 0.12)"
+          zIndex={3}
+          aria-label="Arm controls"
+        >
+          <XStack items="center" justify="space-between">
+            <PanelTitle>Arm</PanelTitle>
             <SecondaryButton size="md" label="Save as rest" disabled={stopped || !arm.current} onPress={() => setConfirmingRest(true)} />
           </XStack>
 
           <RestButton status={arm.status} onRest={arm.rest} disabled={stopped} />
 
           <Joystick
-            width={240}
-            height={184}
+            width={276}
+            height={136}
             knob={44}
             axis="both"
             shape="square"
@@ -268,7 +319,7 @@ export default function Drive() {
             disabled={stopped}
             onMove={arm.setAim}
           />
-          <Muted mt="-1">Drag to aim: sideways turns the arm, up and down lifts the gripper.</Muted>
+          <Muted>Drag to aim: sideways turns the arm, up and down lifts the gripper.</Muted>
 
           <Segmented
             value={arm.grip ?? "none"}
@@ -279,27 +330,23 @@ export default function Drive() {
               { value: "closed", label: "Close" },
             ]}
           />
-        </Panel>
+        </YStack>
+      ) : null}
 
-        <Panel flex={1} items="center" justify="flex-end" gap="2.5">
-          <Joystick
-            width={232}
-            height={88}
-            knob={64}
-            axis="x"
-            label="Turn control"
-            disabled={locked}
-            onMove={(x) => {
-              stick.current.turn = x;
-              flush();
-            }}
-          />
-          <Text fontSize="base" fontWeight="600">
-            Turn
-          </Text>
-        </Panel>
-      </YStack>
-    </XStack>
+      {confirmingRest ? (
+        <SaveRestDialog
+          pose={arm.current}
+          onCancel={() => setConfirmingRest(false)}
+          onSave={() => {
+            arm.saveCurrentAsRest();
+            setConfirmingRest(false);
+            setSavedNotice(true);
+          }}
+        />
+      ) : null}
+
+      {stopped ? <StoppedOverlay onResume={resume} /> : null}
+    </View>
   );
 }
 
@@ -309,7 +356,7 @@ function RestButton({ status, onRest, disabled }: { status: ArmStatus; onRest: (
   return (
     <View
       theme={idle ? undefined : "accent"}
-      h={56}
+      h={52}
       items="center"
       justify="center"
       rounded="2xl"
@@ -327,46 +374,9 @@ function RestButton({ status, onRest, disabled }: { status: ArmStatus; onRest: (
   );
 }
 
-function RestChip({ status, onRest, disabled }: { status: ArmStatus; onRest: () => void; disabled: boolean }) {
-  if (status === "unknown") return null;
-  if (status === "out") {
-    return (
-      <XStack
-        theme="dark"
-        items="center"
-        gap="2.5"
-        h={52}
-        pl="3.5"
-        pr="5"
-        rounded="xl"
-        bg="background"
-        borderWidth={1}
-        borderColor="stop-text"
-        opacity={disabled ? 0.5 : 1}
-        role="button"
-        aria-label="Arm in view. Rest arm"
-        onPress={disabled ? undefined : onRest}
-      >
-        <View w={10} h={10} rounded="full" bg="stop-text" />
-        <Text fontSize="base" fontWeight="600">
-          Arm in view · Rest arm
-        </Text>
-      </XStack>
-    );
-  }
-  return (
-    <XStack theme="dark" items="center" gap="2.5" h={52} pl="3.5" pr="5" rounded="xl" bg="background" borderWidth={1} borderColor="border-color" role="status">
-      <View theme="accent" w={12} h={12} rounded="full" bg={status === "rest" ? "accent-background" : "transparent"} borderWidth={2} borderColor="accent-background" />
-      <Text fontSize="base" fontWeight="500" opacity={0.9}>
-        {status === "rest" ? "Arm at rest · camera clear" : "Moving arm to rest…"}
-      </Text>
-    </XStack>
-  );
-}
-
 function SaveRestDialog({ pose, onCancel, onSave }: { pose: [number, number][] | null; onCancel: () => void; onSave: () => void }) {
   return (
-    <YStack theme="dark" position="absolute" t={0} l={0} r={0} b={0} items="center" justify="center" bg="background" opacity={0.97}>
+    <YStack theme="dark" position="absolute" t={0} l={0} r={0} b={0} items="center" justify="center" bg="rgba(5, 6, 8, 0.9)" zIndex={3}>
       <YStack w={420} gap="4" p="5" rounded="2xl" bg="color-2" borderWidth={1} borderColor="border-color" role="dialog" aria-label="Save rest pose">
         <Text fontSize="xl" fontWeight="600">
           Use this pose as rest?
@@ -395,11 +405,11 @@ function DepthLegend() {
   const near = (DEPTH_BAND_MM / 1000).toFixed(1);
   const far = ((DEPTH_BAND_MM * DEPTH_COLORS.length) / 1000).toFixed(1);
   return (
-    <XStack theme="dark" items="center" gap="2" h={36} px="2.5" rounded="lg" bg="background" borderWidth={1} borderColor="border-color">
+    <XStack theme="dark" items="center" gap="2" h={40} px="3" rounded="lg" bg={GLASS} borderWidth={1} borderColor={GLASS_BORDER}>
       <Mono fontSize="xs">{near} m</Mono>
       <XStack h={10} rounded="xs" overflow="hidden">
         {DEPTH_COLORS.map((color) => (
-          <View key={color} w={5} h={10} style={{ backgroundColor: color }} />
+          <View key={color} w={7} h={10} style={{ backgroundColor: color }} />
         ))}
       </XStack>
       <Mono fontSize="xs">{far} m</Mono>
@@ -409,7 +419,7 @@ function DepthLegend() {
 
 function Readout({ label, value }: { label: string; value: string }) {
   return (
-    <XStack theme="dark" items="center" gap="2" h={36} px="3" rounded="lg" bg="background" borderWidth={1} borderColor="border-color">
+    <XStack theme="dark" items="center" gap="2" h={40} px="3" rounded="lg" bg={GLASS} borderWidth={1} borderColor={GLASS_BORDER}>
       <Mono fontSize="sm" opacity={0.6}>
         {label}
       </Mono>
@@ -421,29 +431,21 @@ function Readout({ label, value }: { label: string; value: string }) {
 function StoppedOverlay({ onResume }: { onResume: () => void }) {
   const { stop } = usePalette();
   return (
-    <YStack
-      theme="dark"
-      position="absolute"
-      t={0}
-      l={0}
-      r={0}
-      b={0}
-      items="center"
-      justify="center"
-      gap="3.5"
-      p="6"
-      bg="background"
-      opacity={0.92}
-      role="alert"
-    >
-      <StopIcon size={56} color={stop} />
-      <Text fontSize="2xl" fontWeight="600">
-        Motion stopped
-      </Text>
-      <Text maxW={380} fontSize="base" lineHeight={1.5} text="center" opacity={0.85}>
-        Velocity is zeroed and any running action group is halted. The robot returns to its init pose.
-      </Text>
-      <PrimaryButton label="Resume control" size="md" onPress={onResume} />
+    <YStack theme="dark" position="absolute" t={0} l={0} r={0} b={0} items="center" justify="center" bg="rgba(5, 6, 8, 0.86)" zIndex={4} role="alert">
+      <YStack w={460} items="center" gap="3.5" p="8" rounded="3xl" bg="color-2" borderWidth={1} borderColor="border-color">
+        <View w={64} h={64} rounded="full" items="center" justify="center" bg="color-1">
+          <StopIcon size={32} color={stop} />
+        </View>
+        <Text fontSize="2xl" fontWeight="600">
+          Robot stopped
+        </Text>
+        <Text fontSize="base" lineHeight={24} text="center" color="color" opacity={0.85}>
+          Walking, actions and modes are halted. The robot settles into its init pose. Controls stay locked until you resume.
+        </Text>
+        <YStack self="stretch" mt="2">
+          <PrimaryButton label="Resume control" onPress={onResume} />
+        </YStack>
+      </YStack>
     </YStack>
   );
 }

@@ -2,43 +2,74 @@ import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-
 import { Text, View, XStack, YStack } from "tamagui";
 
 import { SecondaryButton } from "@/components/Buttons";
-import { Mono, Muted, Panel } from "@/components/Panel";
+import { Mono, Muted, Panel, PanelTitle } from "@/components/Panel";
 import { usePalette } from "@/hooks/usePalette";
 import { rollPitchYaw, yawFromQuaternion, type Imu, type LaserScan, type Odometry, type ServoStateList } from "@/ros/robot";
 import { useRos, useTopic } from "@/ros/RosProvider";
 
-const LEGS: { name: string; ids: [number, number, number] }[] = [
+type Leg = { name: string; ids: [number, number, number] };
+
+// left legs on the left, right legs on the right, front at the top: as seen from above
+const LEFT_LEGS: Leg[] = [
   { name: "LF", ids: [5, 3, 1] },
   { name: "LM", ids: [11, 9, 7] },
   { name: "LR", ids: [17, 15, 13] },
+];
+const RIGHT_LEGS: Leg[] = [
   { name: "RF", ids: [6, 4, 2] },
   { name: "RM", ids: [12, 10, 8] },
   { name: "RR", ids: [18, 16, 14] },
 ];
 const ARM_SERVOS: { name: string; id: number }[] = [
-  { name: "Joint 1", id: 19 },
-  { name: "Joint 2", id: 20 },
-  { name: "Joint 3", id: 21 },
-  { name: "Joint 4", id: 22 },
-  { name: "Joint 5", id: 23 },
-  { name: "Gripper", id: 24 },
+  { name: "J1", id: 19 },
+  { name: "J2", id: 20 },
+  { name: "J3", id: 21 },
+  { name: "J4", id: 22 },
+  { name: "J5", id: 23 },
+  { name: "Grip", id: 24 },
 ];
 const PARTS = ["Coxa", "Femur", "Tibia"];
+const SERVO_COUNT = 24;
 
 const deg = (rad: number) => `${((rad * 180) / Math.PI).toFixed(1)}°`;
+
+const PLOT = 460;
+const CENTER = PLOT / 2;
+const PX_PER_M = 52;
+const MAX_RANGE_M = 4;
+
+const DIRECTIONS = ["ahead", "front-left", "left", "rear-left", "behind", "rear-right", "right", "front-right"];
+
+// closest valid return, with its bearing in words (laser frame: 0 ahead, positive to the left)
+function nearestObstacle(scan: LaserScan | null) {
+  if (!scan) return null;
+  let range = Infinity;
+  let angle = 0;
+  for (let i = 0; i < scan.ranges.length; i++) {
+    const r = scan.ranges[i];
+    if (r === null || !Number.isFinite(r) || r < scan.range_min || r > scan.range_max) continue;
+    if (r < range) {
+      range = r;
+      angle = scan.angle_min + i * scan.angle_increment;
+    }
+  }
+  if (!Number.isFinite(range)) return null;
+  const sector = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
+  return { range, direction: DIRECTIONS[sector] };
+}
 
 export default function Sensors() {
   const { bridge } = useRos();
   const scan = useTopic<LaserScan>("/scan", "sensor_msgs/msg/LaserScan", 250);
   const imu = useTopic<Imu>("/imu", "sensor_msgs/msg/Imu", 200);
   const odom = useTopic<Odometry>("/odom", "nav_msgs/msg/Odometry", 250);
-  const battery = useTopic<{ data: number }>("/ros_robot_controller/battery", "std_msgs/msg/UInt16", 2000);
   const servos = useTopic<ServoStateList>("/controller_manager/servo_states", "servo_controller_msgs/msg/ServoStateList", 1000);
 
   const attitude = imu ? rollPitchYaw(imu.orientation) : null;
   const position = odom?.pose.pose.position;
   const heading = odom ? yawFromQuaternion(odom.pose.pose.orientation) : null;
   const servoById = new Map((servos?.servo_state ?? []).map((s) => [s.id, s]));
+  const nearest = nearestObstacle(scan);
 
   const resetOdometry = () =>
     bridge
@@ -51,149 +82,179 @@ export default function Sensors() {
       .catch(() => {});
 
   return (
-    <XStack flex={1} gap="4" p="4">
-      <Panel flex={1.25} p="5">
-        <XStack items="baseline" gap="3">
-          <Text flex={1} fontSize="xl" fontWeight="600">
-            LiDAR
-          </Text>
-          <Mono fontSize="xs" opacity={0.6}>
-            /scan · LD19
-          </Mono>
-        </XStack>
-        <YStack flex={1} items="center" justify="center" bg="color-1" borderWidth={1} borderColor="border-color" rounded="xl">
+    <XStack flex={1} gap="5" p="6">
+      <Panel w={540} p="5" gap="4" rounded="3xl">
+        <SectionHeader title="LiDAR" topic="/scan · LD19" />
+        <YStack flex={1} items="center" justify="center">
           <ScanPlot scan={scan} />
         </YStack>
-        <Muted>Robot faces up. Rings every meter.</Muted>
+        <XStack items="center" justify="space-between">
+          <Muted>Robot faces up · rings every 1 m</Muted>
+          <XStack items="baseline" gap="1.5">
+            <Text fontSize="sm">Nearest</Text>
+            <Mono fontSize="sm">{nearest ? `${nearest.range.toFixed(2)} m` : "—"}</Mono>
+            {nearest ? <Text fontSize="sm">· {nearest.direction}</Text> : null}
+          </XStack>
+        </XStack>
       </Panel>
 
-      <YStack flex={2} gap="4">
-        <XStack flex={1.5} gap="4">
-          <Panel flex={1} p="5">
-            <XStack items="baseline" gap="3">
-              <Text flex={1} fontSize="xl" fontWeight="600">
-                IMU
-              </Text>
-              <Mono fontSize="xs" opacity={0.6}>
-                /imu
-              </Mono>
-            </XStack>
-            <YStack flex={1} items="center" justify="center">
+      <YStack flex={1} minW={0} gap="5">
+        <XStack h={200} gap="5">
+          <Panel flex={1} p="5" gap="4" rounded="3xl">
+            <SectionHeader title="IMU" topic="/imu" />
+            <XStack flex={1} items="center" gap="5">
               <Horizon roll={attitude?.roll ?? 0} pitch={attitude?.pitch ?? 0} />
-            </YStack>
-            <XStack gap="2">
-              <Stat label="Roll" value={attitude ? deg(attitude.roll) : "—"} />
-              <Stat label="Pitch" value={attitude ? deg(attitude.pitch) : "—"} />
-              <Stat label="Yaw" value={attitude ? deg(attitude.yaw) : "—"} />
+              <YStack flex={1} gap="2">
+                <Stat label="Roll" value={attitude ? deg(attitude.roll) : "—"} />
+                <Stat label="Pitch" value={attitude ? deg(attitude.pitch) : "—"} />
+                <Stat label="Yaw" value={attitude ? deg(attitude.yaw) : "—"} />
+              </YStack>
             </XStack>
           </Panel>
 
-          <YStack flex={1} gap="4">
-            <Panel flex={1} p="5">
-              <XStack items="baseline" gap="3">
-                <Text flex={1} fontSize="xl" fontWeight="600">
-                  Odometry
-                </Text>
-                <Mono fontSize="xs" opacity={0.6}>
-                  /odom
-                </Mono>
-              </XStack>
-              <XStack gap="2">
-                <Stat plain label="x" value={position ? `${position.x.toFixed(2)} m` : "—"} />
-                <Stat plain label="y" value={position ? `${position.y.toFixed(2)} m` : "—"} />
-                <Stat plain label="Heading" value={heading !== null ? deg(heading) : "—"} />
-              </XStack>
-              <View flex={1} />
-              <XStack>
-                <SecondaryButton size="md" label="Reset origin" onPress={resetOdometry} />
-              </XStack>
-            </Panel>
-            <Panel flex={1} p="5" gap="2">
-              <XStack items="baseline" gap="3">
-                <Text flex={1} fontSize="xl" fontWeight="600">
-                  Battery
-                </Text>
-                <Mono fontSize="xs" opacity={0.6}>
-                  /ros_robot_controller/battery
-                </Mono>
-              </XStack>
-              <XStack items="baseline" gap="2">
-                <Mono fontSize="4xl" fontWeight="500">
-                  {battery ? battery.data : "—"}
-                </Mono>
-                <Mono fontSize="xl" opacity={0.68}>
-                  mV
-                </Mono>
-              </XStack>
-              <Muted>Raw reading from the controller board.</Muted>
-            </Panel>
-          </YStack>
+          <Panel flex={1} p="5" gap="4" rounded="3xl">
+            <SectionHeader title="Odometry" topic="/odom" />
+            <XStack gap="3">
+              <Reading label="x" value={position ? `${position.x.toFixed(2)} m` : "—"} />
+              <Reading label="y" value={position ? `${position.y.toFixed(2)} m` : "—"} />
+              <Reading label="Heading" value={heading !== null ? deg(heading) : "—"} />
+            </XStack>
+            <View flex={1} />
+            <XStack>
+              <SecondaryButton size="md" label="Reset origin" onPress={resetOdometry} />
+            </XStack>
+          </Panel>
         </XStack>
 
-        <Panel flex={1} p="5" gap="3.5">
-          <XStack items="baseline" gap="3">
-            <Text flex={1} fontSize="xl" fontWeight="600">
+        <Panel flex={1} p="5" gap="3.5" rounded="3xl">
+          <XStack items="baseline" justify="space-between">
+            <Text fontSize="lg" fontWeight="600">
               Servos
             </Text>
-            <Text fontSize="sm" opacity={0.85}>
-              {servos ? `${servos.servo_state.length} reporting` : "Waiting for servo states"}
-            </Text>
+            <XStack items="center" gap="2">
+              <View w={8} h={8} rounded="full" bg={servos?.servo_state.length === SERVO_COUNT ? "accent-background" : "stop-text"} theme="accent" />
+              <Text fontSize="sm" opacity={0.85}>
+                {servos ? `${servos.servo_state.length} of ${SERVO_COUNT} reporting · pulse 0–1000` : "Waiting for servo states"}
+              </Text>
+            </XStack>
           </XStack>
-          <XStack gap="2">
-            {LEGS.map((leg) => (
-              <YStack key={leg.name} flex={1} gap="1.5" p="2.5" rounded="lg" bg="color-1">
-                <Mono fontSize="sm" fontWeight="600">
-                  {leg.name}
-                </Mono>
-                {leg.ids.map((id, i) => (
-                  <ServoRow key={id} name={PARTS[i]} position={servoById.get(id)?.position} />
-                ))}
-              </YStack>
-            ))}
+
+          <XStack gap="3">
+            <YStack flex={1} minW={0} gap="2">
+              {LEFT_LEGS.map((leg) => (
+                <LegCard key={leg.name} leg={leg} servoById={servoById} />
+              ))}
+            </YStack>
+            <BodyGlyph />
+            <YStack flex={1} minW={0} gap="2">
+              {RIGHT_LEGS.map((leg) => (
+                <LegCard key={leg.name} leg={leg} servoById={servoById} />
+              ))}
+            </YStack>
           </XStack>
-          <XStack gap="2">
-            {ARM_SERVOS.map((servo) => (
-              <XStack key={servo.id} flex={1} items="center" h={40} px="2.5" rounded="lg" bg="color-1">
-                <ServoRow grow name={servo.name} position={servoById.get(servo.id)?.position} />
-              </XStack>
-            ))}
-          </XStack>
+
+          <YStack gap="2">
+            <PanelTitle>Arm</PanelTitle>
+            <XStack gap="2">
+              {ARM_SERVOS.map((servo) => {
+                const value = servoById.get(servo.id)?.position;
+                return (
+                  <XStack key={servo.id} flex={1} h={44} items="center" justify="space-between" px="3" rounded="lg" bg="color-1" borderWidth={1} borderColor="border-color">
+                    <Text fontSize="sm" opacity={0.68}>
+                      {servo.name}
+                    </Text>
+                    <Mono fontSize="base" color={value === undefined ? "stop-text" : "color"}>
+                      {value ?? "—"}
+                    </Mono>
+                  </XStack>
+                );
+              })}
+            </XStack>
+          </YStack>
         </Panel>
       </YStack>
     </XStack>
   );
 }
 
-function ServoRow({ name, position, grow }: { name: string; position: number | undefined; grow?: boolean }) {
-  const online = position !== undefined;
+function SectionHeader({ title, topic }: { title: string; topic: string }) {
   return (
-    <XStack flex={grow ? 1 : undefined} items="center" gap="1.5">
-      <View theme={online ? "accent" : undefined} w={6} h={6} rounded="full" bg={online ? "accent-background" : "stop-text"} />
-      <Text flex={1} fontSize="xs" opacity={0.85}>
-        {name}
+    <XStack items="baseline" justify="space-between">
+      <Text fontSize="lg" fontWeight="600">
+        {title}
       </Text>
-      <Mono fontSize="xs" opacity={0.68}>
-        {online ? position : "—"}
+      <Mono fontSize="xs" opacity={0.6}>
+        {topic}
       </Mono>
     </XStack>
   );
 }
 
-function Stat({ label, value, plain }: { label: string; value: string; plain?: boolean }) {
+function LegCard({ leg, servoById }: { leg: Leg; servoById: Map<number, { position: number }> }) {
   return (
-    <YStack flex={1} gap="0.5" p={plain ? 0 : "2.5"} rounded="lg" bg={plain ? "transparent" : "color-1"}>
-      <Text fontSize="xs" opacity={0.68}>
+    <YStack h={70} justify="center" gap="1" px="3.5" rounded="lg" bg="color-1" borderWidth={1} borderColor="border-color">
+      <Mono fontSize="sm" fontWeight="600">
+        {leg.name}
+      </Mono>
+      <XStack gap="2">
+        {leg.ids.map((id, i) => {
+          const value = servoById.get(id)?.position;
+          return (
+            <YStack key={id} flex={1}>
+              <Text fontSize="xs" opacity={0.68}>
+                {PARTS[i]}
+              </Text>
+              <Mono fontSize="base" color={value === undefined ? "stop-text" : "color"}>
+                {value ?? "—"}
+              </Mono>
+            </YStack>
+          );
+        })}
+      </XStack>
+    </YStack>
+  );
+}
+
+// the body between the two leg columns, front at the top
+function BodyGlyph() {
+  const { ink } = usePalette();
+  const h = 70 * 3 + 8 * 2;
+  const rows = [35, 35 + 78, 35 + 156];
+  return (
+    <Svg width={56} height={h} viewBox={`0 0 56 ${h}`} accessibilityLabel="Robot body, front at the top">
+      <Rect x={12} y={10} width={32} height={h - 20} rx={16} fill="none" stroke={ink} strokeOpacity={0.25} strokeWidth={2} />
+      <Path d="M21 28 L28 21 L35 28" fill="none" stroke={ink} strokeOpacity={0.6} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      {rows.map((y) => (
+        <G key={y}>
+          <Line x1={0} y1={y} x2={12} y2={y} stroke={ink} strokeOpacity={0.25} strokeWidth={2} />
+          <Line x1={44} y1={y} x2={56} y2={y} stroke={ink} strokeOpacity={0.25} strokeWidth={2} />
+        </G>
+      ))}
+    </Svg>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <XStack items="baseline" justify="space-between">
+      <Text fontSize="sm" opacity={0.68}>
+        {label}
+      </Text>
+      <Mono fontSize="lg">{value}</Mono>
+    </XStack>
+  );
+}
+
+function Reading({ label, value }: { label: string; value: string }) {
+  return (
+    <YStack flex={1} gap="1">
+      <Text fontSize="sm" opacity={0.68}>
         {label}
       </Text>
       <Mono fontSize="lg">{value}</Mono>
     </YStack>
   );
 }
-
-const PLOT = 400;
-const CENTER = PLOT / 2;
-const PX_PER_M = 45;
-const MAX_RANGE_M = 4;
 
 function ScanPlot({ scan }: { scan: LaserScan | null }) {
   const { accent, ink, surface } = usePalette();
@@ -212,6 +273,7 @@ function ScanPlot({ scan }: { scan: LaserScan | null }) {
 
   return (
     <Svg width={PLOT} height={PLOT} viewBox={`0 0 ${PLOT} ${PLOT}`} accessibilityLabel="LiDAR scan around the robot, out to 4 meters">
+      <Rect x={0} y={0} width={PLOT} height={PLOT} rx={16} fill={ink} fillOpacity={0.03} />
       {[1, 2, 3, 4].map((m) => (
         <G key={m}>
           <Circle cx={CENTER} cy={CENTER} r={m * PX_PER_M} fill="none" stroke={ink} strokeOpacity={0.15} strokeWidth={1.5} />
@@ -243,14 +305,16 @@ function ScanPlot({ scan }: { scan: LaserScan | null }) {
 
 function Horizon({ roll, pitch }: { roll: number; pitch: number }) {
   const { accent, ink, surface } = usePalette();
-  const offset = Math.max(-50, Math.min(50, (pitch * 180) / Math.PI));
+  const size = 112;
+  const c = size / 2;
+  const offset = Math.max(-40, Math.min(40, (pitch * 180) / Math.PI));
   return (
-    <Svg width={150} height={150} viewBox="0 0 150 150" accessibilityLabel="Attitude indicator">
-      <Circle cx={75} cy={75} r={70} fill={surface} stroke={ink} strokeOpacity={0.2} strokeWidth={2} />
-      <G rotation={(-roll * 180) / Math.PI} origin="75, 75">
-        <Line x1={12} y1={75 + offset} x2={138} y2={75 + offset} stroke={accent} strokeWidth={2} />
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} accessibilityLabel="Attitude indicator">
+      <Circle cx={c} cy={c} r={c - 2} fill={surface} stroke={ink} strokeOpacity={0.2} strokeWidth={1.5} />
+      <G rotation={(-roll * 180) / Math.PI} origin={`${c}, ${c}`}>
+        <Line x1={8} y1={c + offset} x2={size - 8} y2={c + offset} stroke={accent} strokeWidth={2.5} strokeLinecap="round" />
       </G>
-      <Path d="M48 75 L64 75 L75 86 L86 75 L102 75" fill="none" stroke={ink} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d={`M${c - 22} ${c} L${c - 8} ${c} L${c} ${c + 7} L${c + 8} ${c} L${c + 22} ${c}`} fill="none" stroke={ink} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }

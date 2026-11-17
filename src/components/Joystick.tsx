@@ -15,11 +15,13 @@ type Props = {
   shape?: 'round' | 'square'
   label: string
   disabled?: boolean
+  // see-through base, for a stick floating over the camera
+  overlay?: boolean
   // x right-positive, y up-positive, each in [-1, 1]
   onMove: (x: number, y: number) => void
 }
 
-export function Joystick({ width, height, knob, axis, shape = 'round', label, disabled, onMove }: Props) {
+export function Joystick({ width, height, knob, axis, shape = 'round', label, disabled, overlay, onMove }: Props) {
   const { ink } = usePalette()
   const tx = useSharedValue(0)
   const ty = useSharedValue(0)
@@ -71,9 +73,9 @@ export function Joystick({ width, height, knob, axis, shape = 'round', label, di
         w={width}
         h={height}
         rounded={shape === 'square' ? '2xl' : 'full'}
-        bg="color-1"
-        borderWidth={2}
-        borderColor="border-color"
+        bg={overlay ? 'rgba(0, 0, 0, 0.35)' : 'color-1'}
+        borderWidth={overlay ? 1 : 2}
+        borderColor={overlay ? 'rgba(255, 255, 255, 0.16)' : 'border-color'}
         items="center"
         justify="center"
         opacity={disabled ? 0.4 : 1}

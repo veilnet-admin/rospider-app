@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import Svg, { Path } from "react-native-svg";
+import { ActivityIndicator } from "react-native";
 import { ScrollView, Text, View, XStack, YStack } from "tamagui";
 
-import { Mono, Muted, Panel, PanelTitle } from "@/components/Panel";
+import { InfoIcon, PlayIcon, SquareStopIcon } from "@/components/icons";
+import { Muted, PanelTitle } from "@/components/Panel";
 import { usePalette } from "@/hooks/usePalette";
 import { useRos, useTopic } from "@/ros/RosProvider";
 
 type Action = { id: string; name: string };
 
+const COLUMNS = 4;
+
 // action groups stored on the robot; dances are special-cased by move_controller
-const GROUPS: { title: string; actions: Action[] }[] = [
+const GROUPS: { title: string; note?: string; actions: Action[] }[] = [
   {
     title: "Stance",
     actions: [
@@ -34,6 +37,7 @@ const GROUPS: { title: string; actions: Action[] }[] = [
   },
   {
     title: "Dances",
+    note: "A dance waits for the current action to finish",
     actions: [
       { id: "dance_1", name: "Dance 1" },
       { id: "dance_2", name: "Dance 2" },
@@ -41,6 +45,17 @@ const GROUPS: { title: string; actions: Action[] }[] = [
     ],
   },
 ];
+
+// rows of a fixed width, padded so every tile in the grid is the same size
+function rows<T>(items: T[], size: number): (T | null)[][] {
+  const out: (T | null)[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    const row: (T | null)[] = items.slice(i, i + size);
+    while (row.length < size) row.push(null);
+    out.push(row);
+  }
+  return out;
+}
 
 export default function Actions() {
   const { robot, stopped } = useRos();
@@ -69,83 +84,52 @@ export default function Actions() {
   };
 
   return (
-    <XStack flex={1} gap="4" p="4">
-      <ScrollView flex={1} contentContainerStyle={{ gap: 22, paddingBottom: 8 }}>
+    <YStack flex={1} p="6" gap="5">
+      <ScrollView flex={1} contentContainerStyle={{ gap: 20 }}>
         {GROUPS.map((group) => (
           <YStack key={group.title} gap="2.5">
-            <PanelTitle>{group.title}</PanelTitle>
-            <XStack flexWrap="wrap" gap="2.5">
-              {group.actions.map((action) => (
-                <ActionCard
-                  key={action.id}
-                  action={action}
-                  active={running?.id === action.id}
-                  disabled={stopped}
-                  onPress={() => run(action)}
-                />
-              ))}
+            <XStack items="center" justify="space-between">
+              <PanelTitle>{group.title}</PanelTitle>
+              {group.note ? <Muted>{group.note}</Muted> : null}
             </XStack>
+            {rows(group.actions, COLUMNS).map((row, i) => (
+              <XStack key={i} gap="3">
+                {row.map((action, j) =>
+                  action ? (
+                    <ActionTile
+                      key={action.id}
+                      action={action}
+                      active={running?.id === action.id}
+                      disabled={stopped}
+                      onPress={() => run(action)}
+                    />
+                  ) : (
+                    // same padding and border as a tile, or Yoga gives the tiles a wider share of the row
+                    <View key={`empty-${j}`} flex={1} pl="5" pr="4" borderWidth={1} borderColor="transparent" />
+                  )
+                )}
+              </XStack>
+            ))}
           </YStack>
         ))}
       </ScrollView>
 
-      <Panel w={340} p="5" gap="4">
-        <PanelTitle>Now running</PanelTitle>
-        {running ? (
-          <YStack gap="4">
-            <YStack gap="1.5">
-              <Text fontSize="3xl" fontWeight="600" lineHeight={1.15}>
-                {running.name}
-              </Text>
-              <Mono fontSize="sm" opacity={0.68}>
-                run_actionset · {running.id}
-              </Mono>
-            </YStack>
-            <XStack theme="accent" items="center" gap="2.5" p="3" rounded="lg" bg="background">
-              <View w={10} h={10} rounded="full" bg="color" />
-              <Text flex={1} fontSize="sm">
-                Running until the robot reports it is complete
-              </Text>
-            </XStack>
-            <View h={56} items="center" justify="center" rounded="2xl" borderWidth={2} borderColor="stop" role="button" onPress={stop}>
-              <Text fontSize="lg" fontWeight="600" color="stop-text">
-                Stop action
-              </Text>
-            </View>
-            <Muted>Stopping halts the action group and returns the robot to its init pose.</Muted>
-          </YStack>
-        ) : (
-          <YStack gap="2" py="5">
-            <Text fontSize="xl" fontWeight="600">
-              Nothing running
-            </Text>
-            <Muted fontSize="base">Tap an action to run it. Starting a new one interrupts the current action.</Muted>
-          </YStack>
-        )}
-        <View flex={1} />
-        <YStack gap="1.5" pt="4" borderTopWidth={1} borderColor="border-color">
-          <Text fontSize="sm" fontWeight="600">
-            Dances wait their turn
-          </Text>
-          <Muted>A dance starts only after the current action has finished.</Muted>
-        </YStack>
-      </Panel>
-    </XStack>
+      <StatusBar running={running} onStop={stop} />
+    </YStack>
   );
 }
 
-function ActionCard({ action, active, disabled, onPress }: { action: Action; active: boolean; disabled: boolean; onPress: () => void }) {
-  const { ink } = usePalette();
+function ActionTile({ action, active, disabled, onPress }: { action: Action; active: boolean; disabled: boolean; onPress: () => void }) {
+  const { accent, ink } = usePalette();
   return (
     <XStack
-      theme={active ? "accent" : "level2"}
-      w="23.5%"
-      minH={76}
+      theme="level2"
+      flex={1}
+      h={80}
       items="center"
-      gap="3"
-      pl="4"
-      pr="3"
-      py="3"
+      gap="3.5"
+      pl="5"
+      pr="4"
       rounded="2xl"
       bg="background"
       borderWidth={1}
@@ -153,22 +137,79 @@ function ActionCard({ action, active, disabled, onPress }: { action: Action; act
       opacity={disabled ? 0.5 : 1}
       scale="press:0.98"
       role="button"
-      aria-label={`Run ${action.name}`}
+      aria-label={active ? `${action.name}, running` : `Run ${action.name}`}
       onPress={disabled ? undefined : onPress}
     >
       <YStack flex={1} minW={0} gap="1">
-        <Text fontSize="base" fontWeight="600">
+        <Text fontSize="lg" fontWeight="600">
           {action.name}
         </Text>
-        <Mono fontSize="xs" opacity={0.6}>
-          {action.id.startsWith("dance_") ? action.id : `${action.id}.d6a`}
-        </Mono>
+        {active ? (
+          <Text fontSize="sm" fontWeight="500" color={accent}>
+            Running
+          </Text>
+        ) : null}
       </YStack>
-      <View w={38} h={38} rounded="full" items="center" justify="center" bg="color-3">
-        <Svg width={14} height={16} viewBox="0 0 14 16">
-          <Path d="M2 1.5 L12.5 8 L2 14.5 Z" fill={ink} />
-        </Svg>
-      </View>
+      {active ? (
+        <View theme="accent" w={44} h={44} rounded="full" items="center" justify="center" bg="background">
+          <ActivityIndicator color="#ffffff" />
+        </View>
+      ) : (
+        <View w={44} h={44} rounded="full" items="center" justify="center" bg="color-3">
+          <PlayIcon size={18} color={ink} />
+        </View>
+      )}
+    </XStack>
+  );
+}
+
+function StatusBar({ running, onStop }: { running: Action | null; onStop: () => void }) {
+  const { accent, ink, stop } = usePalette();
+
+  if (!running) {
+    return (
+      <XStack h={88} items="center" gap="5" px="6" rounded="2xl" bg="color-1" borderWidth={1} borderColor="border-color" role="status">
+        <InfoIcon size={28} color={ink} />
+        <Text w={220} fontSize="xl" fontWeight="600">
+          Nothing running
+        </Text>
+        <Muted flex={1} fontSize="base">
+          Tap an action to run it. A new action interrupts the current one. Stopping returns the robot to its init pose.
+        </Muted>
+      </XStack>
+    );
+  }
+
+  return (
+    <XStack theme="level2" h={88} items="center" gap="5" pl="6" pr="4" rounded="2xl" bg="background" borderWidth={1} borderColor="accent-background" role="status">
+      <ActivityIndicator size="large" color={accent} />
+      <YStack w={220} gap="1">
+        <PanelTitle>Now running</PanelTitle>
+        <Text fontSize="xl" fontWeight="600" numberOfLines={1}>
+          {running.name}
+        </Text>
+      </YStack>
+      <Muted flex={1} fontSize="base">
+        Runs until the robot reports it is done. Tapping another action interrupts it.
+      </Muted>
+      <XStack
+        h={52}
+        items="center"
+        gap="2.5"
+        px="5"
+        rounded="xl"
+        borderWidth={1}
+        borderColor="stop-text"
+        scale="press:0.98"
+        role="button"
+        aria-label="Stop action"
+        onPress={onStop}
+      >
+        <SquareStopIcon size={18} color={stop} />
+        <Text fontSize="base" fontWeight="600" color="stop-text">
+          Stop action
+        </Text>
+      </XStack>
     </XStack>
   );
 }

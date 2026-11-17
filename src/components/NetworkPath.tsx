@@ -5,7 +5,7 @@ import { Text, XStack } from 'tamagui'
 import { usePalette } from '@/hooks/usePalette'
 import { useBridgeStatus, useRos } from '@/ros/RosProvider'
 
-import { HexapodIcon } from './icons'
+import { RobotIcon } from './icons'
 import { Mono } from './Panel'
 
 const toInt = (ip: string) => {
@@ -21,7 +21,7 @@ function sameSubnet(a: string, b: string, mask: string) {
 }
 
 export function NetworkPath() {
-  const { ink, accent } = usePalette()
+  const { ink } = usePalette()
   const net = useNetInfo()
   const status = useBridgeStatus()
   const { connection, rtt } = useRos()
@@ -50,7 +50,7 @@ export function NetworkPath() {
 
   return (
     <XStack
-      h={40}
+      h={48}
       items="center"
       gap="3"
       px="5"
@@ -89,9 +89,9 @@ export function NetworkPath() {
       <Arrow color={ink} dim={status !== 'connected'} />
 
       <XStack items="center" gap="2" opacity={status === 'connected' ? 1 : 0.5}>
-        <HexapodIcon size={16} color={accent} />
+        <RobotIcon color={ink} />
         <Text fontSize="sm" opacity={0.85}>
-          ROSpider
+          Robot
         </Text>
         <Mono fontSize="sm">{connection.host}</Mono>
       </XStack>
